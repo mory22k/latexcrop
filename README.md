@@ -11,7 +11,7 @@ This is a simple app that
 
 ## How to Run
 
-Set up the LaTeX environment. TexLive or MacTeX is recommended.
+Set up the LaTeX environment. TeX Live or MacTeX is recommended.
 
 Install [mise](https://github.com/mise-app/mise) (recommended).
 
