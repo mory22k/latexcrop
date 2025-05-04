@@ -1,0 +1,25 @@
+[project]
+name = "latexcrop"
+version = "0.1.0"
+description = "Add your description here"
+authors = [
+    { name = "KM", email = "mory22k@dc.tohoku.ac.jp" }
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "ipykernel>=6.29.5",
+    "pikepdf>=9.7.0",
+    "reflex>=0.7.9",
+]
+
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "ruff>=0.11.8",
+]
