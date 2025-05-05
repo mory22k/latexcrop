@@ -17,3 +17,5 @@ wheels/
 
 node_modules
 output.pdf
+config/latexmkrc
+config/preamble
