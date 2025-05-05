@@ -3,21 +3,21 @@ from pathlib import Path
 import reflex as rx
 
 # DTO & Models
-from domain.models.embedded_file import EmbeddedFile
-from application.dto.compile_request import CompileRequest
-from application.dto.crop_request import CropRequest
-from application.dto.embed_request import EmbedRequest
 from application.dto.process_result import ProcessResult
+from application.dto.pipeline_request import PipelineRequest
 
 # UseCases
 from application.usecases.generate_pdf_usecase import GeneratePdfUseCase
 from application.usecases.trim_pdf_usecase import TrimPdfUseCase
 from application.usecases.embed_tex_usecase import EmbedTexUseCase
+from application.usecases.make_transparent_usecase import MakeTransparentUseCase
+from application.usecases.process_pdf_pipeline_usecase import ProcessPdfPipelineUseCase
 
 # Services
 from domain.services.latex_compile_service import LatexCompileService
 from domain.services.pdf_crop_service import PdfCropService
 from domain.services.pdf_embed_service import PdfEmbedService
+from domain.services.pdf_transparency_service import PdfTransparencyService
 
 # Default settings
 DEFAULT_TEX_BODY = r"""Hello, world!
@@ -72,16 +72,8 @@ class CompileState(rx.State):
         self.logs = []
         yield
 
-        compile_service = LatexCompileService()
-        crop_service = PdfCropService()
-        embed_service = PdfEmbedService()
-        generate_uc = GeneratePdfUseCase(compile_service)
-        trim_uc = TrimPdfUseCase(crop_service)
-        embed_uc = EmbedTexUseCase(embed_service)
-
         tex_state = await self.get_state(TexState)
         config_state = await self.get_state(ConfigState)
-
         tex_content = str(
             str(config_state.tex_preamble)
             + "\n\\begin{document}\n"
@@ -90,36 +82,36 @@ class CompileState(rx.State):
         )
         rc_content = str(config_state.rc_content)
 
-        self.logs = []
+        compile_service = LatexCompileService()
+        crop_service = PdfCropService()
+        embed_service = PdfEmbedService()
+        transparency_service = PdfTransparencyService()
 
-        compile_req = CompileRequest(
-            tex_content=tex_content, latexmkrc_content=rc_content
+        pipeline_uc = ProcessPdfPipelineUseCase(
+            generate_uc=GeneratePdfUseCase(compile_service),
+            trim_uc=TrimPdfUseCase(crop_service),
+            embed_uc=EmbedTexUseCase(embed_service),
+            transparency_uc=MakeTransparentUseCase(transparency_service)
         )
-        compile_res: ProcessResult = generate_uc.execute(compile_req)
-        self.logs.extend(compile_res.logs)
-        if not compile_res.is_success:
-            print("Compilation failed.")
+
+        result: ProcessResult = pipeline_uc.execute(
+            PipelineRequest(
+                tex_content=tex_content,
+                latexmkrc_content=rc_content,
+                margins=DEFAULT_PDF_MARGINS,
+                embedded_files=[],
+            )
+        )
+        self.logs.extend(result.logs)
+
+        if not result.is_success:
             self.is_compiling = False
             return
 
-        crop_req = CropRequest(
-            pdf_path=compile_res.pdf_path, margins=DEFAULT_PDF_MARGINS
-        )
-        crop_res: ProcessResult = trim_uc.execute(crop_req)
-        self.logs.extend(crop_res.logs)
-
-        embedded_file = EmbeddedFile(name="main.tex", data=tex_content.encode("utf-8"))
-        embed_req = EmbedRequest(
-            pdf_path=crop_res.pdf_path, embedded_files=[embedded_file]
-        )
-        embed_res: ProcessResult = embed_uc.execute(embed_req)
-        self.logs.extend(embed_res.logs)
-
-        # copy output pdf to static folder
-        Path(embed_res.pdf_path).rename(
+        self.logs.append("Compilation succeeded.")
+        Path(result.pdf_path).rename(
             Path(__file__).parent / OUTPUT_FOLDER / "output.pdf"
         )
-
         self.output_pdf_path = str("output.pdf")
         self.is_compiling = False
 
