@@ -33,13 +33,6 @@ class ProcessPdfPipelineUseCase:
         )
         comp_res = self.generate_uc.execute(comp_req)
         logs.extend(comp_res.logs)
-        if not comp_res.is_success:
-            print("Compilation failed.")
-            return ProcessResult(
-                pdf_path="",
-                logs=logs,
-                is_success=False
-            )
 
         # 2. トリミング
         crop_req = CropRequest(

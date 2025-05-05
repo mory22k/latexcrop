@@ -25,12 +25,7 @@ class GeneratePdfUseCase:
         logs.append("Validated LatexmkrcSource.")
 
         # PDF を生成
-        try:
-            result = self.compile_service.compile(tex_doc, rc_source)
-        except Exception as e:
-            logs.append(f"Failed to compile: {e}")
-            return ProcessResult(pdf_path=None, logs=logs, is_success=False)
-
+        result = self.compile_service.compile(tex_doc, rc_source)
         pdf_doc = result
         logs.append(f"Generated PDF at {pdf_doc.path}")
 
