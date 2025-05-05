@@ -1,21 +1,25 @@
 from pathlib import Path
 import reflex as rx
 
+from application.dto.extract_result import ExtractResult
 from domain.models.latexmkrc_source import LatexmkrcSource
 
 from application.dto.process_result import ProcessResult
 from application.dto.pipeline_request import PipelineRequest
+from application.dto.extract_request import ExtractRequest
 
 from application.usecases.generate_pdf_usecase import GeneratePdfUseCase
 from application.usecases.trim_pdf_usecase import TrimPdfUseCase
 from application.usecases.embed_tex_usecase import EmbedTexUseCase
 from application.usecases.make_transparent_usecase import MakeTransparentUseCase
 from application.usecases.process_pdf_pipeline_usecase import ProcessPdfPipelineUseCase
+from application.usecases.extract_tex_usecase import ExtractTexUseCase
 
 from domain.services.latex_compile_service import LatexCompileService
 from domain.services.pdf_crop_service import PdfCropService
 from domain.services.pdf_embed_service import PdfEmbedService
 from domain.services.pdf_transparency_service import PdfTransparencyService
+from domain.services.pdf_extract_service import PdfExtractService
 
 # Default settings
 DEFAULT_TEX_BODY = r"""Hello, world!
@@ -60,6 +64,8 @@ class AppState(rx.State):
     output_pdf_path: str = ""
     is_result_available: bool = False
     logs: list[str] = []
+    do_extract_body: bool = True
+    do_extract_preamble: bool = False
 
     @rx.event
     def set_loading_true(self):
@@ -155,16 +161,11 @@ class AppState(rx.State):
         )
         rc_content = self.rc_content
 
-        compile_svc = LatexCompileService()
-        crop_svc = PdfCropService()
-        embed_svc = PdfEmbedService()
-        transparency_svc = PdfTransparencyService()
-
         pipeline_uc = ProcessPdfPipelineUseCase(
-            generate_uc=GeneratePdfUseCase(compile_svc),
-            trim_uc=TrimPdfUseCase(crop_svc),
-            embed_uc=EmbedTexUseCase(embed_svc),
-            transparency_uc=MakeTransparentUseCase(transparency_svc),
+            generate_uc=GeneratePdfUseCase(LatexCompileService()),
+            trim_uc=TrimPdfUseCase(PdfCropService()),
+            embed_uc=EmbedTexUseCase(PdfEmbedService()),
+            transparency_uc=MakeTransparentUseCase(PdfTransparencyService()),
         )
 
         try:
@@ -173,13 +174,13 @@ class AppState(rx.State):
                     tex_content=tex_content,
                     latexmkrc_content=rc_content,
                     margins=DEFAULT_PDF_MARGINS,
-                    embedded_files=[],
                 )
             )
         except Exception as e:
             self.logs.append(f"[Error] {e}")
             self.set_loading_false()
             return
+
         self.logs.extend(result.logs)
         dest = Path(__file__).parent / OUTPUT_FOLDER / OUTPUT_PDF_NAME
         Path(result.pdf_path).rename(dest)
@@ -188,6 +189,36 @@ class AppState(rx.State):
         self.logs.append(
             "Please wait. If the page does not update automatically, please reload."
         )
+
+    @rx.event
+    async def load_pdf(self, files: list[rx.UploadFile]):
+        """
+        PDF を読み込む
+        """
+        self.set_loading_true()
+        file = files[0]
+        upload_data = await file.read()
+        extract_svc = PdfExtractService()
+        extract_uc = ExtractTexUseCase(extract_service=extract_svc)
+        try:
+            result: ExtractResult = extract_uc.execute(
+                ExtractRequest(pdf_bytes=upload_data)
+            )
+        except Exception as e:
+            self.logs.append(f"[Error] {e}")
+            self.set_loading_false()
+            return
+
+        self.logs.append("Extracted preamble from PDF.")
+        if self.do_extract_body:
+            self.tex_preamble = result.preamble
+            self.logs.append("Extracted TeX body from PDF.")
+
+        if self.do_extract_preamble:
+            self.tex_body = result.body
+            self.logs.append("Extracted TeX preamble from PDF.")
+
+        self.set_loading_false()
 
 
 def save_dialog() -> rx.Component:
@@ -309,7 +340,6 @@ def index() -> rx.Component:
             font_size="2em",
             margin_bottom="4px",
         ),
-        # PDF プレビュー & ダウンロード
         rx.card(
             rx.el.iframe(
                 src=AppState.output_pdf_path,
@@ -329,26 +359,59 @@ def index() -> rx.Component:
                 justify="start",
             ),
         ),
-        # TeX 本文入力
         rx.card(
-            rx.text_area(
-                placeholder="Type your LaTeX code here...",
-                value=AppState.tex_body,
-                on_change=AppState.set_tex_body,
-                resize="vertical",
-                min_height="200px",
-                font_family=MONOSPACE_FONT_FAMILY,
-            ),
-            rx.flex(
-                rx.button(
-                    "Compile!",
-                    on_click=AppState.execute,
-                    color_scheme="blue",
-                    loading=AppState.is_loading,
+            rx.hstack(
+                rx.box(
+                    rx.text_area(
+                        placeholder="Type your LaTeX code here...",
+                        value=AppState.tex_body,
+                        on_change=AppState.set_tex_body,
+                        resize="vertical",
+                        min_height="200px",
+                        font_family=MONOSPACE_FONT_FAMILY,
+                    ),
+                    rx.flex(
+                        rx.button(
+                            "Compile!",
+                            on_click=AppState.execute,
+                            color_scheme="blue",
+                            loading=AppState.is_loading,
+                        ),
+                        spacing="3",
+                        margin_top="4px",
+                        justify="start",
+                    ),
+                    width="70%",
                 ),
-                spacing="3",
-                margin_top="4px",
-                justify="start",
+                rx.box(
+                    rx.upload(
+                        rx.text("Extract from PDF"),
+                        id="pdf_upload",
+                        on_drop=AppState.load_pdf(
+                            rx.upload_files(upload_id="pdf_upload")
+                        ),
+                        height="200px",
+                        width="100%",
+                    ),
+                    rx.flex(
+                        rx.text("Extract"),
+                        rx.checkbox(
+                            "body",
+                            is_checked=AppState.do_extract_body,
+                            on_change=AppState.set_do_extract_body,
+                            default_checked=True,
+                        ),
+                        rx.checkbox(
+                            "preamble",
+                            is_checked=AppState.do_extract_preamble,
+                            on_change=AppState.set_do_extract_preamble,
+                        ),
+                        spacing="3",
+                        margin_top="4px",
+                        justify="end",
+                        align="end",
+                    ),
+                ),
             ),
         ),
         # Preamble & latexmkrc 入力
@@ -366,7 +429,7 @@ def index() -> rx.Component:
                     resize="vertical",
                     font_family=MONOSPACE_FONT_FAMILY,
                     width="100%",
-                    min_height="200px",
+                    min_height="100px",
                 ),
                 rx.text_area(
                     placeholder="Type your latexmkrc code here...",
@@ -375,7 +438,7 @@ def index() -> rx.Component:
                     resize="vertical",
                     font_family=MONOSPACE_FONT_FAMILY,
                     width="100%",
-                    min_height="200px",
+                    min_height="100px",
                 ),
             ),
             rx.flex(
