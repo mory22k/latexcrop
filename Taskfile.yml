@@ -1,0 +1,21 @@
+version: '3'
+
+tasks:
+  default:
+    aliases: [list]
+    desc: |
+      List all tasks in the Taskfile
+    cmds:
+      - task --list-all
+
+  run:
+    desc: |
+      Run the main reflex script
+    cmds:
+      - cd src/presentation && uv run reflex run
+
+  setup:
+    desc: Set up the development environment
+    cmds:
+      - npm install
+      - lefthook install

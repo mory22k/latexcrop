@@ -1,2 +1,6 @@
 [tools]
 uv = "latest"
+python = "3.13"
+task = "latest"
+lefthook = "latest"
+npm = "latest"
