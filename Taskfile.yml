@@ -2,7 +2,8 @@ version: '3'
 
 tasks:
   default:
-    aliases: [list]
+    aliases:
+      - list
     desc: |
       List all tasks in the Taskfile
     cmds:
@@ -19,3 +20,19 @@ tasks:
     cmds:
       - npm install
       - lefthook install
+
+  cli-extract:
+    aliases:
+      - e
+    desc: |
+      Extract the TeX source code from the PDF at cli/result
+    cmds:
+      - cd cli && uv run extract.py
+
+  cli-compile:
+    aliases:
+      - c
+    desc: |
+      Compile the TeX source code at cli/tex
+    cmds:
+      - cd cli && uv run compile.py
