@@ -151,6 +151,7 @@ class AppState(rx.State):
         self.set_loading_true()
         self.output_pdf_path = ""
         self.logs = []
+        self.is_result_available = False
         yield
 
         tex_content = (
@@ -338,25 +339,39 @@ def index() -> rx.Component:
         rx.heading(
             "LaTeX Crop Renderer",
             font_size="2em",
-            margin_bottom="4px",
+            margin_bottom="6px",
         ),
         rx.card(
-            rx.el.iframe(
-                src=AppState.output_pdf_path,
-                width="100%",
-                height="300px",
-            ),
-            rx.flex(
-                rx.button(
-                    "Download",
-                    on_click=rx.download(AppState.output_pdf_path, "output.pdf"),
-                    loading=AppState.is_loading,
-                    disabled=rx.cond(AppState.output_pdf_path, False, True),
-                    color_scheme="blue",
+            rx.box(
+                rx.cond(
+                    AppState.is_result_available,
+                    rx.el.iframe(
+                        src=AppState.output_pdf_path,
+                        width="100%",
+                        height="300pt",
+                    ),
+                    rx.flex(
+                        rx.text("No result PDF available."),
+                        justify="center",
+                        align="center",
+                        height="300pt",
+                        font_size="1.5em",
+                        color="gray",
+                    )
                 ),
-                spacing="3",
-                margin_top="4px",
-                justify="start",
+                rx.flex(
+                    rx.button(
+                        rx.icon("download", size=16),
+                        on_click=rx.download(AppState.output_pdf_path, "output.pdf"),
+                        loading=AppState.is_loading,
+                        disabled=rx.cond(AppState.output_pdf_path, False, True),
+                        color_scheme="blue",
+                    ),
+                    spacing="3",
+                    margin_top="4px",
+                    justify="start",
+                ),
+                height="100%",
             ),
         ),
         rx.card(
@@ -419,7 +434,7 @@ def index() -> rx.Component:
             rx.heading(
                 "Preamble and latexmkrc",
                 font_size="1.2em",
-                margin_bottom="4px",
+                margin_bottom="6px",
             ),
             rx.hstack(
                 rx.text_area(
